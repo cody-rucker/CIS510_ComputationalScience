@@ -17,27 +17,27 @@ function ComputeLU(A)
       N = size(A)[1]
 
       Id  = Matrix{Float64}(I, N, N)
-      ℓ   = copy(Id)
-      ℓ⁻¹ = copy(Id)
-      Ã   = copy(A)
+      ell   = copy(Id)
+      ell_inv = copy(Id)
+      Atilde   = copy(A)
       L   = copy(Id)
 
 
       for k = 1:N-1
-            ℓ   .= Id
-            ℓ⁻¹ .= Id
+            ell   .= Id
+            ell_inv .= Id
 
 
             for i = k+1:N
-                  ℓ[i, k]   = -Ã[i,k] / Ã[k,k]
-                  ℓ⁻¹[i, k] = Ã[i,k] / Ã[k,k]
+                  ell[i, k]   = -Atilde[i,k] / Atilde[k,k]
+                  ell_inv[i, k] = Atilde[i,k] / Atilde[k,k]
             end
 
-            Ã .= ℓ * Ã
-            L .= L * ℓ⁻¹
+            Atilde .= ell * Atilde
+            L .= L * ell_inv
       end
 
-      U = Ã
+      U = Atilde
 
       return L, U
 end

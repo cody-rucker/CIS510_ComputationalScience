@@ -1,0 +1,95 @@
+\documentclass[12pt]{article}
+
+\usepackage{graphicx}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{mathtools}
+\usepackage{color}
+\usepackage{changepage}
+\usepackage[margin=1.2in]{geometry}
+\newcommand{\Tau}{\mathrm{T}}
+\usepackage{enumitem}
+\usepackage{subfig}
+\usepackage{enumitem}
+\usepackage{sectsty}
+\usepackage{upgreek}
+\usepackage{setspace}
+\usepackage{cite}
+\usepackage[final]{pdfpages}
+\usepackage{float}
+\usepackage{siunitx}
+\usepackage{wrapfig}
+\usepackage{tikz}
+\usetikzlibrary{decorations.pathreplacing}
+\usetikzlibrary{arrows,angles,quotes}
+\usepackage{systeme}
+\usepackage{listings}
+\usepackage{scrextend}
+\usepackage{minted}
+
+
+\sectionfont{\fontsize{15}{18}\selectfont}
+\subsectionfont{\fontsize{12}{15}\selectfont}
+
+\begin{document}
+
+\begin{minted}{julia}
+
+using LinearAlgebra
+
+"""
+    ComputeLU(a)
+
+Compute and return LU factorization of sqaure matrix a.
+
+# Examples
+'''
+julia> A = rand(3, 3)
+julia> (L, U) = ComputeLU(A)
+'''
+"""
+
+
+function ComputeLU(A)
+      N = size(A)[1]
+
+      Id  = Matrix{Float64}(I, N, N)
+      ℓ   = copy(Id)
+      ℓ⁻¹ = copy(Id)
+      Ã   = copy(A)
+      L   = copy(Id)
+
+
+      for k = 1:N-1
+            ℓ   .= Id
+            ℓ⁻¹ .= Id
+
+
+            for i = k+1:N
+                  ℓ[i, k]   = -Ã[i,k] / Ã[k,k]
+                  ℓ⁻¹[i, k] = Ã[i,k] / Ã[k,k]
+            end
+
+            Ã .= ℓ * Ã
+            L .= L * ℓ⁻¹
+      end
+
+      U = Ã
+
+      return L, U
+end
+
+
+N = 100
+A = Array{Float64}(undef, N, N)
+A .= rand(N, N)
+
+(myL, myU) = ComputeLU(A)
+
+@assert myL*myU ≈ A
+
+
+\end{minted}
+
+\end{document}
