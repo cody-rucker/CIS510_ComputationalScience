@@ -24,24 +24,11 @@ function computeLUP(A)
     ell_inv = copy(Id)
     Atilde  = copy(A)
     L       = copy(Id)
-    P       = copy(Id)
 
     for k = 1:N-1  # marching across columns
 
         ell .= Id
         ell_inv .= Id
-
-        p, q = find_pivot(A[:, k]) # find largest elt. in col k
-
-        P[k,k] = 0
-        P[q[1],q[1]] = 0
-        P[q[1],k] = 1
-        P[k,q[1]] = 1
-
-        Atilde = P*Atilde
-
-
-
         for i = k+1:N
             ell[i,k] = -Atilde[i,k] / Atilde[k,k] # compute elimination factors
             ell_inv[i,k] = Atilde[i,k] / Atilde[k,k]
@@ -53,23 +40,20 @@ function computeLUP(A)
 
 
 
-
-
-
     end
-    U = Atilde * P
+    U = Atilde
 
     return (L, U)
 end
 
 
 
-N = 10
+N = 300
 A = Array{Float64}(undef,N,N)
 A .= rand(N,N)#[6 -2 2;12 -8 6;3 -13 3]
 
 (myL, myU) = computeLUP(A)
-#@assert myL*myU≈ A
+@assert myL*myU ≈ A
 
 b = rand(N,1) # defines the right hand side of Ax = b
 
@@ -80,7 +64,6 @@ println("Compute my LU factorization")
 @printf "norm(A-LU) = \x1b[31m %e \x1b[0m\n" norm(myL*myU-A)
 println("-----------")
 println()
-
 
 #=
 println("Peform my LU solve")
