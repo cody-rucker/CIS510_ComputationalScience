@@ -6,6 +6,8 @@ function find_pivot(a)
     k = length(a)
     p = 0
 
+    a = broadcast(abs, a)
+
     for i = 1:k
         if abs(p) < abs(a[i])
             p = a[i]
@@ -47,7 +49,7 @@ function computeLUP(A)
     for k = 1:N-1  # marching across columns
 
 
-
+        ell = copy(Id)
 
         #j = find_pivot(A[:, k])
         j = findmax(Atilde[k:N ,k])[2]
@@ -55,14 +57,10 @@ function computeLUP(A)
 
         if j != k
             (P_ij[j,: ], P_ij[k, :]) = ( P_ij[k, :], P_ij[j,: ] )
-            (ell[k,1:k-1 ], ell[j, 1:k-1]) = ( ell[j, 1:k-1], ell[k,1:k-1 ] )
+            #(ell[k,1:k-1 ], ell[j, 1:k-1]) = ( ell[j, 1:k-1], ell[k,1:k-1 ] )
             (Atilde[j, k:N ],Atilde[k, k:N]) = ( Atilde[k, k:N], Atilde[j, k:N ] )
         end
 
-
-        #Atilde .=P_ij * Atilde
-        print(Atilde[k,k])
-        print("\n")
         @assert Atilde[k,k] != 0
 
 
@@ -70,23 +68,22 @@ function computeLUP(A)
 
         for i = k+1:N
             ell[i,k] = -Atilde[i,k] / Atilde[k,k] # compute elimination factors
-            Atilde[i, k:N] = Atilde[i, k:N]  +ell[i,k] * Atilde[k, k:N]
+            Atilde[i, k:N] = Atilde[i, k:N]  + ell[i,k] * Atilde[k, k:N]
             ell_inv[i,k] = Atilde[i,k] / Atilde[k,k]
         end
 
 
         #Atilde .= ell * Atilde
         #L      .=  ell_inv * L
-        #L[:, k] = ell[:, k]
-        L .= L * ell_inv
+        L[:, k] = ell[:, k]
+        #L .= L * ell_inv
+
 
     end
     U = Atilde
     P = P_ij
-    L_inv = copy(L)
-    L_inv .= - L
 
-    return (L, U, P, L_inv)
+    return (L, U, P)
 end
 
 
@@ -95,7 +92,7 @@ N = 5
 A = Array{Float64}(undef,N,N)
 A .= rand(N,N)#[6 -2 2;12 -8 6;3 -13 3]
 
-(myL, myU, myP, L_inv) = computeLUP(A)
+(myL, myU, myP) = computeLUP(A)
 #@assert myL*myU*myP ≈ A
 
 b = rand(N,1) # defines the right hand side of Ax = b
@@ -116,7 +113,7 @@ println("-----------")
 println()
 =#
 
-
+#=
 
 function conj_grad(A, x0, b, tol, iter_max)
 
@@ -175,3 +172,4 @@ iter_max = 100
 
 x = conj_grad(A, x0, b, tol, iter_max)
 @assert (norm( A*x -b) / norm(x)) <= tol
+=#
