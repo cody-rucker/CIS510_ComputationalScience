@@ -1,14 +1,24 @@
 using LinearAlgebra
 using Printf
 
+"""
+    find_pivot(a)
 
-function find_pivot(a)
-    k = length(a)
+Locate the element of maximal absolute value in the one-dimensional array a.
+
+# Examples
+```jldoctest
+julia> A = [ 1 2 -3]
+julia> j = find_pivot(A)
+```
+"""
+function find_pivot(a, k)
+    N = length(a)
     p = 0
 
     a = broadcast(abs, a)
 
-    for i = 1:k
+    for i = k:N
         if abs(p) < abs(a[i])
             p = a[i]
         end
@@ -21,18 +31,15 @@ function find_pivot(a)
 end
 
 """
-    LUPsolve(a)
+    computeLUP(a)
 
-Compute and return LU factorization of square matrix a.
+Compute and return LUP factorization of square matrix a.
 
 # Examples
-'''
+```jldoctest
 julia> A = rand(3,3)
-julia> (L, U) = LUPsolve(A)
-
-etc
-
-'''
+julia> (L, U, P) = LUPsolve(A)
+```
 """
 function computeLUP(A)
     # TODO: develop to include partial pivoting
@@ -46,37 +53,37 @@ function computeLUP(A)
     P       = copy(Id)
     P_ij    = copy(Id)
 
+
+    j = find_pivot(Atilde[:,1], 1)
+
+    if j != 1
+        (P_ij[j,: ], P_ij[1, :]) = ( P_ij[1, :], P_ij[j,: ] )
+        (Atilde[j, 1:N ],Atilde[1, 1:N]) = ( Atilde[1, 1:N], Atilde[j, 1:N ] )
+    end
+
     for k = 1:N-1  # marching across columns
 
 
-        ell = copy(Id)
+        ell .= Id
+        ell_inv .= Id
 
-        #j = find_pivot(A[:, k])
-        j = findmax(Atilde[k:N ,k])[2]
-
-
-        if j != k
-            (P_ij[j,: ], P_ij[k, :]) = ( P_ij[k, :], P_ij[j,: ] )
-            #(ell[k,1:k-1 ], ell[j, 1:k-1]) = ( ell[j, 1:k-1], ell[k,1:k-1 ] )
-            (Atilde[j, k:N ],Atilde[k, k:N]) = ( Atilde[k, k:N], Atilde[j, k:N ] )
-        end
-
-        @assert Atilde[k,k] != 0
-
-
-        #P .= P_ij * P
 
         for i = k+1:N
-            ell[i,k] = -Atilde[i,k] / Atilde[k,k] # compute elimination factors
-            Atilde[i, k:N] = Atilde[i, k:N]  + ell[i,k] * Atilde[k, k:N]
+            ell[i,k] = -Atilde[i,k] / Atilde[k,k]
             ell_inv[i,k] = Atilde[i,k] / Atilde[k,k]
         end
 
+        Atilde .= ell * Atilde
+        L .= L * ell_inv
 
-        #Atilde .= ell * Atilde
-        #L      .=  ell_inv * L
-        L[:, k] = ell[:, k]
-        #L .= L * ell_inv
+        j = find_pivot(Atilde[:,k+1], k+1)
+
+        if j != k+1
+            (P_ij[j,: ], P_ij[k+1, :]) = ( P_ij[k+1, :], P_ij[j,: ] )
+            (L[k+1,1:k ], L[j, 1:k]) = ( L[j, 1:k], L[k+1,1:k ] )
+            (Atilde[j, : ],Atilde[k+1, :]) = ( Atilde[k+1, :], Atilde[j, : ] )
+        end
+
 
 
     end
@@ -86,35 +93,135 @@ function computeLUP(A)
     return (L, U, P)
 end
 
+"""
+    LUPsolve(A, b)
+
+Solve the matrix equation Ax=b using LU factorization.
+
+# Examples
+```jldoctest
+julia> A = rand(3,3)
+julia> b = rand(3,1)
+julia> x = LUPsolve(A, b)
+```
+"""
+function LUPsolve(A, b)
+
+    N = size(L)[1]
+
+    L, U, P = computeLUP(A)
+
+    b = P*b
+
+    y = forward_sub(L, b)
+    x = backward_sub(U, y)
+
+    return x
 
 
-N = 5
-A = Array{Float64}(undef,N,N)
-A .= rand(N,N)#[6 -2 2;12 -8 6;3 -13 3]
 
-(myL, myU, myP) = computeLUP(A)
-#@assert myL*myU*myP ≈ A
+end
 
-b = rand(N,1) # defines the right hand side of Ax = b
+"""
+    backward_sub(A, b)
 
-#x = LUPsolve(myL, myU, b)
+Solve the matrix equation Ax=b for upper triangluar matrix A using back substitution.
 
-println("Compute my LU factorization")
-@time (myL, myU, myP) = computeLUP(A)
-@printf "norm(A-LU) = \x1b[31m %e \x1b[0m\n" norm(myL*myU-myP*A)
-println("-----------")
-println()
+# Examples
+```jldoctest
+julia> A = [1 2 3;
+            0 4 5;
+            0 0 6]
+julia> x = backward_sub(A, b)
+```
+"""
+function backward_sub(A, b)
+    N = size(A)[2]
+    for i = 1:N # march along columns
+        k = N+1-i # backwards
+
+        b[k] = b[k] / A[k,k] # normalize the pivot
+        for j = 1:k-1
+
+            b[j] = b[j] - b[k] * A[j,k]
+        end
+    end
+    return b
+end
+
+"""
+    forward_sub(A, b)
+
+Solve the matrix equation Ax=b for lower triangluar matrix A using forward substitution.
+
+# Examples
+```jldoctest
+julia> A = [1 0 0;
+            2 3 0;
+            4 5 6]
+julia> x = forward_sub(A, b)
+```
+"""
+function forward_sub(A, b)
+    N = size(A)[2]
+
+    for i = 1:N # march along columns
+
+        b[i] = b[i] / A[i,i]
+        for j = i+1:N
+
+            b[j] = b[j] - b[i]*A[j,i]
+        end
+    end
+    return b
+end
+
 
 #=
-println("Peform my LU solve")
-@time x = LUPsolve(myL, myU, b)
-@printf "norm(Ax-b) = \x1b[31m %e \x1b[0m\n" norm(A*x-b)
-println("-----------")
-println()
+N= 10
+A = rand(N,N)
+b = rand(N,1)
+
+x = LUPsolve(A,b)
+x2 = A\b
+
+norm(x-x2)
+
+
+# displaying run times
+N = 10
+A = Array{Float64}(undef,N,N)
+A .= rand(N,N)
+
+computeLUP(A)
+@time (myL, myU, myP) = computeLUP(A)
+@assert myL*myU ≈myP*A
+
+b = rand(N,1)
+LUPsolve(myL, myU, myP, b)
+@time x = LUPsolve(myL, myU, myP, b)
+@assert A*x ≈ b
 =#
 
-#=
 
+
+"""
+    conj_grad(A, x0, b, tol, iter_max))
+
+Solve the matrix equation Ax=b using iterated conjugate gradient method.
+
+# Arguments
+- `tol::Real`: the desired tolerance on relative error.
+- `iter_max::Integer`: the maximum number of allowed iterations.
+
+# Examples
+```jldoctest
+julia> A = rand(3,3)
+julia> b = rand(3,1)
+julia> x0 = [0; 0; 0]
+julia> x = conj_grad(A, x0, b, tol, iter_max))
+```
+"""
 function conj_grad(A, x0, b, tol, iter_max)
 
     i = 0
@@ -157,19 +264,7 @@ function conj_grad(A, x0, b, tol, iter_max)
         end
     end
 
+    @assert (norm( A*x -b) / norm(x)) <= tol
 
     return x
 end
-
-N = 10
-B = rand(N, N)
-A = B' * B
-
-x0 = vec(zeros(N,1))
-b = vec(ones(N,1))
-tol = 10^-6
-iter_max = 100
-
-x = conj_grad(A, x0, b, tol, iter_max)
-@assert (norm( A*x -b) / norm(x)) <= tol
-=#
