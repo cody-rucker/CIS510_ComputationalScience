@@ -2,6 +2,8 @@ using SparseArrays
 using Plots
 include("myForwBack_Euler.jl")
 
+#theme(:vibrant)
+
 # TODO: this code is in development and has not been verified!
 
 # Solve steady state and time-dependent heat equation in 1D
@@ -65,18 +67,19 @@ function time_dependent_heat(k, Δx, Δt, T, my_source, my_initial)
     u = Array{Float64}(undef,N-1)
     u .= my_initial(x[2:N])  # setting the initial condition for interior nodes
     Y = zeros(N+1,M+1)
-    Y[2:N,1] .= u[:]
+    #Y[2:N,1] .= u[:]
 
+#=
     for n = 1:M
         b = Δt * my_source(x[2:N],t[n])
         u[:] = A * u[:] + b
         Y[2:N,n] .= u[:]
 
     end
+=#
 
 
-
-#    my_forward_Euler!(Y, Δt, 0, T, A, F, u, x, N)
+    my_forward_Euler!(Y, Δt, 0, T, A, F, u, x, N)
 
 
 
@@ -107,7 +110,7 @@ plot(x,[U E], label = labels, shape = markershapes, color = markercolors)
 
 υ = time_dependent_heat(k, Δx, Δt, T, F, f)
 
-
+#=
 pyplot(legend=false, xlim=(0,1), ylim=(0,1.25))
 
 anim = @animate for i = 1:length(t)
@@ -121,3 +124,4 @@ anim = @animate for i = 1:length(t)
 end
 
 gif(anim, "anim_fps15.gif", fps = 30)
+=#

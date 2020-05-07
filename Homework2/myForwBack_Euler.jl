@@ -11,20 +11,27 @@ function exact(t)
 end
 
 
-function my_forward_Euler!(Y, Δt, t1, tf, A, c, y, x, N)
+function my_forward_Euler!(Y, Δt, t1, tf, A, F, y, x, N)
 
     t = t1:Δt:tf
     M = Integer(ceil((tf-t1)/Δt))
-    Y[:,1] = y[:]
+    Y[2:N,1] = y[:]
 
     #Exact = Matrix{Float64}(undef,2,N+1)
     #Exact[:,1] = y[:]
-
+#=
     for n = 2:M
         y[:] = y[:] + Δt*(A*y[:] .+ F(x[2:N],t[n]))
         Y[: ,n] = y[:]
 
         #Exact[:,n] = exact(t[n])
+    end
+=#
+    for n = 1:M
+        b = Δt * F(x[2:N],t[n])
+        y[:] = A * y[:] + b
+        Y[2:N,n] .= y[:]
+
     end
 
     #return (t, Y)
