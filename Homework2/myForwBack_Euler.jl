@@ -1,32 +1,12 @@
 using LinearAlgebra
 using Plots
 
-
-function exact(t)
-    x = zeros(2)
-    x[1] = -2*exp(-2t)*(cos(8t) + 8sin(8t)) + (5/8)*exp(-2t)*(8*cos(8t) - sin(8t))
-    x[2] = -10*exp(-2t)*cos(8t) - (5/8)*exp(-2t)*5*sin(8t)
-
-    return x
-end
-
-
-function my_forward_Euler!(Y, Δt, t1, tf, A, F, y, x, N)
-
-    t = t1:Δt:tf
-    M = Integer(ceil((tf-t1)/Δt))
+function my_forward_Euler!(Y, Δt, t, A, F, y, x, N, M)
+    #M = length(t)
+    #t = t1:Δt:tf
+    #M = Integer(ceil((tf-t1)/Δt))
     Y[2:N,1] = y[:]
 
-    #Exact = Matrix{Float64}(undef,2,N+1)
-    #Exact[:,1] = y[:]
-#=
-    for n = 2:M
-        y[:] = y[:] + Δt*(A*y[:] .+ F(x[2:N],t[n]))
-        Y[: ,n] = y[:]
-
-        #Exact[:,n] = exact(t[n])
-    end
-=#
     for n = 1:M
         b = Δt * F(x[2:N],t[n])
         y[:] = A * y[:] + b
@@ -39,24 +19,21 @@ function my_forward_Euler!(Y, Δt, t1, tf, A, F, y, x, N)
 end
 
 
-function my_backward_Euler!(Y, Δt, t1, tf, A, c, y)
+function my_backward_Euler!(Y, Δt, t, A, F, y, x, N, M)
 
 
-    Y[:,1] = y[:]
+    Y[2:N,1] = y[:]
 
-    Exact = Matrix{Float64}(undef,2,N+1)
-    Exact[:,1] = y[:]
+    #Exact = Matrix{Float64}(undef,2,N+1)
+    #Exact[:,1] = y[:]
 
-    Id = Matrix{Float64}(I,N+1,N+1)
+    Id = I(N-1) #Matrix{Float64}(I,N+1,N+1)
 
-    for n = 2:N+1
-        y[:] = (I - Δt*A)\(y[:] .+ Δt*c[n])
-        Y[:,n] = y[:]
-        Exact[:,n] = exact(t[n])
+    for n = 2:M-1
+        y[:] = A\(y[:] .+ Δt*F(x[2:N], t[n]))
+        Y[2:N,n] = y[:]
+        #Exact[:,n] = exact(t[n])
     end
-
-    return (t, Exact)
-
 end
 
 #=
