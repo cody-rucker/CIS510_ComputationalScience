@@ -1,0 +1,229 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{using} \PYG{n}{SparseArrays}
+\PYG{k}{using} \PYG{n}{CuArrays}
+\PYG{k}{using} \PYG{n}{CUDAnative}
+\PYG{k}{using} \PYG{n}{CUDAdrv}\PYG{o}{:} \PYG{n}{synchronize}
+\PYG{n}{include}\PYG{p}{(}\PYG{l+s}{\PYGZdq{}addVectors.jl\PYGZdq{}}\PYG{p}{)}
+\PYG{n}{include}\PYG{p}{(}\PYG{l+s}{\PYGZdq{}rates.jl\PYGZdq{}}\PYG{p}{)}
+
+
+\PYG{c}{\PYGZsh{} compute y = Ax + b}
+\PYG{k}{function} \PYG{n}{knl\PYGZus{}gemv\PYGZus{}naive!}\PYG{p}{(}\PYG{n}{A}\PYG{p}{,} \PYG{n}{x}\PYG{p}{,} \PYG{n}{b}\PYG{p}{)}
+    \PYG{n}{N} \PYG{o}{=} \PYG{n}{size}\PYG{p}{(}\PYG{n}{A}\PYG{p}{,} \PYG{l+m+mi}{1}\PYG{p}{)}
+
+    \PYG{n+nd}{@assert} \PYG{n}{length}\PYG{p}{(}\PYG{n}{x}\PYG{p}{)} \PYG{o}{==} \PYG{n}{N}
+    \PYG{n+nd}{@assert} \PYG{n}{length}\PYG{p}{(}\PYG{n}{b}\PYG{p}{)} \PYG{o}{==} \PYG{n}{N}
+
+    \PYG{n}{y} \PYG{o}{=} \PYG{n}{zeros}\PYG{p}{(}\PYG{n}{N}\PYG{p}{)}
+
+    \PYG{k}{for} \PYG{n}{i} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}
+        \PYG{k}{for} \PYG{n}{j} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}
+            \PYG{n}{y}\PYG{p}{[}\PYG{n}{i}\PYG{p}{]} \PYG{o}{+=} \PYG{n}{A}\PYG{p}{[}\PYG{n}{i}\PYG{p}{,} \PYG{n}{j}\PYG{p}{]} \PYG{o}{*} \PYG{n}{x}\PYG{p}{[}\PYG{n}{j}\PYG{p}{]}\PYG{c}{\PYGZsh{} + b[i]/N}
+        \PYG{k}{end}
+        \PYG{c}{\PYGZsh{} which is faster, including bᵢ in the j loop or appending it}
+        \PYG{c}{\PYGZsh{} just outside the j loop by}
+        \PYG{n}{y}\PYG{p}{[}\PYG{n}{i}\PYG{p}{]} \PYG{o}{+=} \PYG{n}{b}\PYG{p}{[}\PYG{n}{i}\PYG{p}{]}
+    \PYG{k}{end}
+
+    \PYG{k}{return} \PYG{n}{y}
+
+
+\PYG{k}{end}
+
+\PYG{k}{function} \PYG{n}{knl\PYGZus{}gemv!}\PYG{p}{(}\PYG{n}{b}\PYG{p}{,} \PYG{n}{A}\PYG{p}{,} \PYG{n}{x}\PYG{p}{)}
+    \PYG{n}{N} \PYG{o}{=} \PYG{n}{size}\PYG{p}{(}\PYG{n}{A}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{)}
+
+    \PYG{n+nd}{@assert} \PYG{n}{length}\PYG{p}{(}\PYG{n}{x}\PYG{p}{)} \PYG{o}{==} \PYG{n}{N}
+    \PYG{n+nd}{@assert} \PYG{n}{length}\PYG{p}{(}\PYG{n}{b}\PYG{p}{)} \PYG{o}{==} \PYG{n}{N}
+
+    \PYG{n}{bidx} \PYG{o}{=} \PYG{n}{blockIdx}\PYG{p}{()}\PYG{o}{.}\PYG{n}{x}  \PYG{c}{\PYGZsh{} get the thread\PYGZsq{}s block ID}
+    \PYG{n}{tidx} \PYG{o}{=} \PYG{n}{threadIdx}\PYG{p}{()}\PYG{o}{.}\PYG{n}{x} \PYG{c}{\PYGZsh{} get my thread ID}
+    \PYG{n}{dimx} \PYG{o}{=} \PYG{n}{blockDim}\PYG{p}{()}\PYG{o}{.}\PYG{n}{x}  \PYG{c}{\PYGZsh{} how many threads in each block}
+
+    \PYG{n}{bidy} \PYG{o}{=} \PYG{n}{blockIdx}\PYG{p}{()}\PYG{o}{.}\PYG{n}{y}  \PYG{c}{\PYGZsh{} get the thread\PYGZsq{}s block ID}
+    \PYG{n}{tidy} \PYG{o}{=} \PYG{n}{threadIdx}\PYG{p}{()}\PYG{o}{.}\PYG{n}{y} \PYG{c}{\PYGZsh{} get my thread ID}
+    \PYG{n}{dimy} \PYG{o}{=} \PYG{n}{blockDim}\PYG{p}{()}\PYG{o}{.}\PYG{n}{y}  \PYG{c}{\PYGZsh{} how many threads in each block}
+
+
+    \PYG{c}{\PYGZsh{} figure out what work i need to do}
+    \PYG{n}{i} \PYG{o}{=} \PYG{n}{dimx} \PYG{o}{*} \PYG{p}{(}\PYG{n}{bidx} \PYG{o}{\PYGZhy{}} \PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{+} \PYG{n}{tidx}
+    \PYG{n}{j} \PYG{o}{=} \PYG{n}{dimy} \PYG{o}{*} \PYG{p}{(}\PYG{n}{bidy} \PYG{o}{\PYGZhy{}} \PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{+} \PYG{n}{tidy}
+
+    \PYG{k}{if} \PYG{n}{i} \PYG{o}{\PYGZlt{}=} \PYG{n}{size}\PYG{p}{(}\PYG{n}{A}\PYG{p}{,} \PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{\PYGZam{}\PYGZam{}} \PYG{n}{j} \PYG{o}{\PYGZlt{}=} \PYG{n}{size}\PYG{p}{(}\PYG{n}{x}\PYG{p}{,} \PYG{l+m+mi}{2}\PYG{p}{)}
+        \PYG{k}{for} \PYG{n}{k} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}
+            \PYG{n}{b}\PYG{p}{[}\PYG{n}{i}\PYG{p}{,} \PYG{n}{j}\PYG{p}{]} \PYG{o}{+=} \PYG{n}{A}\PYG{p}{[}\PYG{n}{i}\PYG{p}{,} \PYG{n}{k}\PYG{p}{]} \PYG{o}{*} \PYG{n}{x}\PYG{p}{[}\PYG{n}{k}\PYG{p}{,} \PYG{n}{j}\PYG{p}{]}
+        \PYG{k}{end}
+    \PYG{k}{end}
+
+
+\PYG{k}{end}
+
+\PYG{c+cm}{\PYGZsh{}=}
+\PYG{c+cm}{let}
+
+\PYG{c+cm}{    M = 10}
+\PYG{c+cm}{    N = M}
+\PYG{c+cm}{    Q = 1}
+
+\PYG{c+cm}{    A = rand(M, N)}
+\PYG{c+cm}{    x = rand(N, Q)}
+\PYG{c+cm}{    b = rand(N, Q)}
+
+\PYG{c+cm}{    d\PYGZus{}A = CuArray(A)}
+\PYG{c+cm}{    d\PYGZus{}x = CuArray(x)}
+\PYG{c+cm}{    d\PYGZus{}b = CuArray(b)}
+\PYG{c+cm}{    d\PYGZus{}bcopy = similar(d\PYGZus{}b)}
+
+
+
+\PYG{c+cm}{    num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}x = 32}
+\PYG{c+cm}{    num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}y = 32}
+\PYG{c+cm}{    thd\PYGZus{}tuple = (num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}x, num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}y)}
+
+\PYG{c+cm}{    num\PYGZus{}blocks\PYGZus{}x = cld(M, num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}x)}
+\PYG{c+cm}{    num\PYGZus{}blocks\PYGZus{}y = cld(Q, num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}y)}
+
+\PYG{c+cm}{    \PYGZsh{}matmul!(C, A, B)}
+\PYG{c+cm}{    \PYGZsh{}fake\PYGZus{}knl\PYGZus{}matmul!(C, A, B, num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}x, num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}y, num\PYGZus{}blocks\PYGZus{}x, num\PYGZus{}blocks\PYGZus{}y)}
+
+\PYG{c+cm}{    @cuda threads = thd\PYGZus{}tuple blocks = (num\PYGZus{}blocks\PYGZus{}x, num\PYGZus{}blocks\PYGZus{}y) knl\PYGZus{}gemv!(d\PYGZus{}bcopy, d\PYGZus{}A, d\PYGZus{}x)}
+\PYG{c+cm}{    synchronize()}
+
+\PYG{c+cm}{    t\PYGZus{}device = @elapsed begin}
+\PYG{c+cm}{        @cuda threads = thd\PYGZus{}tuple blocks = (num\PYGZus{}blocks\PYGZus{}x, num\PYGZus{}blocks\PYGZus{}y) knl\PYGZus{}gemv!(d\PYGZus{}b, d\PYGZus{}A, d\PYGZus{}x)}
+\PYG{c+cm}{        synchronize()}
+\PYG{c+cm}{    end}
+\PYG{c+cm}{    @show t\PYGZus{}device}
+
+\PYG{c+cm}{    t\PYGZus{}host = @elapsed begin}
+\PYG{c+cm}{        C0 = A * x + b}
+\PYG{c+cm}{    end}
+
+
+\PYG{c+cm}{    @show t\PYGZus{}host}
+
+
+\PYG{c+cm}{    \PYGZsh{}@show norm(CuArray(C0) \PYGZhy{} d\PYGZus{}C)}
+\PYG{c+cm}{    @assert CuArray(C0) ≈ d\PYGZus{}b}
+\PYG{c+cm}{end}
+\PYG{c+cm}{=\PYGZsh{}}
+
+\PYG{k}{function} \PYG{n}{F}\PYG{p}{(}\PYG{n}{x}\PYG{p}{,}\PYG{n}{t}\PYG{p}{)}
+    \PYG{k}{return} \PYG{l+m+mi}{2}\PYG{o}{*}\PYG{p}{(}\PYG{n+nb}{pi}\PYG{o}{\PYGZca{}}\PYG{l+m+mi}{2} \PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{)}\PYG{o}{*}\PYG{n}{exp}\PYG{p}{(}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{n}{t}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sin}\PYG{o}{.}\PYG{p}{(}\PYG{n+nb}{pi}\PYG{o}{*}\PYG{n}{x}\PYG{p}{)}
+\PYG{k}{end}
+
+\PYG{k}{function} \PYG{n}{f}\PYG{p}{(}\PYG{n}{x}\PYG{p}{)}
+    \PYG{k}{return} \PYG{n}{sin}\PYG{o}{.}\PYG{p}{(}\PYG{n+nb}{pi}\PYG{o}{*}\PYG{n}{x}\PYG{p}{)}
+\PYG{k}{end}
+
+\PYG{k}{function} \PYG{n}{exact}\PYG{p}{(}\PYG{n}{x}\PYG{p}{,}\PYG{n}{t}\PYG{p}{)}
+    \PYG{k}{return} \PYG{n}{exp}\PYG{p}{(}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{n}{t}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sin}\PYG{o}{.}\PYG{p}{(}\PYG{n+nb}{pi}\PYG{o}{*}\PYG{n}{x}\PYG{p}{)}
+    \PYG{c}{\PYGZsh{}return exp(\PYGZhy{}pi\PYGZca{}2 * t)*sin.(pi*x)}
+\PYG{k}{end}
+
+\PYG{k}{function} \PYG{n}{time\PYGZus{}dependent\PYGZus{}heat\PYGZus{}GPU}\PYG{p}{(}\PYG{n}{k}\PYG{p}{,} \PYG{n}{Δx}\PYG{p}{,} \PYG{n}{Δt}\PYG{p}{,} \PYG{n}{T}\PYG{p}{,} \PYG{n}{my\PYGZus{}source}\PYG{p}{,} \PYG{n}{my\PYGZus{}initial}\PYG{p}{)}
+    \PYG{n}{N}  \PYG{o}{=} \PYG{k+kt}{Integer}\PYG{p}{(}\PYG{n}{ceil}\PYG{p}{((}\PYG{l+m+mi}{1}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{0}\PYG{p}{)}\PYG{o}{/}\PYG{n}{Δx}\PYG{p}{))} \PYG{c}{\PYGZsh{} N+1 total nodes, N\PYGZhy{}1 interior nodes}
+    \PYG{n}{x} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{o}{:}\PYG{n}{Δx}\PYG{o}{:}\PYG{l+m+mi}{1}
+    \PYG{n}{t} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{o}{:}\PYG{n}{Δt}\PYG{o}{:}\PYG{n}{T}
+    \PYG{n}{M} \PYG{o}{=} \PYG{k+kt}{Integer}\PYG{p}{(}\PYG{n}{ceil}\PYG{p}{((}\PYG{n}{T}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{0}\PYG{p}{)}\PYG{o}{/}\PYG{n}{Δt}\PYG{p}{))} \PYG{c}{\PYGZsh{} M+1 total temporal nodes}
+
+    \PYG{n}{λ} \PYG{o}{=} \PYG{n}{Δt}\PYG{o}{/}\PYG{n}{Δx}\PYG{o}{\PYGZca{}}\PYG{l+m+mi}{2}
+
+    \PYG{c}{\PYGZsh{} A is N+1 by N+1}
+    \PYG{n}{A} \PYG{o}{=} \PYG{p}{(}\PYG{l+m+mi}{1}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{o}{*}\PYG{n}{λ}\PYG{o}{*}\PYG{n}{k}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sparse}\PYG{p}{(}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{ones}\PYG{p}{(}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{),} \PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{,} \PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{+}
+            \PYG{p}{(}\PYG{n}{λ}\PYG{o}{*}\PYG{n}{k}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sparse}\PYG{p}{(}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{p}{,}\PYG{n}{ones}\PYG{p}{(}\PYG{n}{N}\PYG{p}{),}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{+}
+            \PYG{p}{(}\PYG{n}{λ}\PYG{o}{*}\PYG{n}{k}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sparse}\PYG{p}{(}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{p}{,}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{ones}\PYG{p}{(}\PYG{n}{N}\PYG{p}{),}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{)}
+
+    \PYG{c}{\PYGZsh{} initial conditions}
+    \PYG{n}{u} \PYG{o}{=} \PYG{n}{zeros}\PYG{p}{(}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{)}
+    \PYG{n}{u} \PYG{o}{.=} \PYG{n}{my\PYGZus{}initial}\PYG{o}{.}\PYG{p}{(}\PYG{n}{x}\PYG{p}{)}
+    \PYG{n}{u\PYGZus{}serial} \PYG{o}{=} \PYG{n}{copy}\PYG{p}{(}\PYG{n}{u}\PYG{p}{)}
+
+    \PYG{n}{d\PYGZus{}A} \PYG{o}{=} \PYG{n}{CuArray}\PYG{p}{(}\PYG{n}{A}\PYG{p}{)}
+    \PYG{n}{d\PYGZus{}u} \PYG{o}{=} \PYG{n}{CuArray}\PYG{p}{(}\PYG{n}{u}\PYG{p}{)}
+    \PYG{n}{d\PYGZus{}b} \PYG{o}{=} \PYG{n}{CuArray}\PYG{p}{(}\PYG{n}{zeros}\PYG{p}{(}\PYG{k+kt}{Float64}\PYG{p}{,} \PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{))}
+
+    \PYG{n}{num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}x} \PYG{o}{=} \PYG{l+m+mi}{32}
+    \PYG{n}{num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}y} \PYG{o}{=} \PYG{l+m+mi}{32}
+    \PYG{n}{thd\PYGZus{}tuple} \PYG{o}{=} \PYG{p}{(}\PYG{n}{num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}x}\PYG{p}{,} \PYG{n}{num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}y}\PYG{p}{)}
+
+    \PYG{n}{num\PYGZus{}blocks\PYGZus{}x} \PYG{o}{=} \PYG{n}{cld}\PYG{p}{(}\PYG{n}{size}\PYG{p}{(}\PYG{n}{A}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{),} \PYG{n}{num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}x}\PYG{p}{)}
+    \PYG{n}{num\PYGZus{}blocks\PYGZus{}y} \PYG{o}{=} \PYG{n}{cld}\PYG{p}{(}\PYG{n}{size}\PYG{p}{(}\PYG{n}{u}\PYG{p}{,}\PYG{l+m+mi}{2}\PYG{p}{),} \PYG{n}{num\PYGZus{}threads\PYGZus{}per\PYGZus{}block\PYGZus{}y}\PYG{p}{)}
+
+    \PYG{n}{F}\PYG{p}{(}\PYG{n}{x}\PYG{p}{,} \PYG{n}{t}\PYG{p}{[}\PYG{l+m+mi}{1}\PYG{p}{])}
+    \PYG{n+nd}{@cuda} \PYG{n}{threads} \PYG{o}{=} \PYG{n}{thd\PYGZus{}tuple} \PYG{n}{blocks} \PYG{o}{=} \PYG{p}{(}\PYG{n}{num\PYGZus{}blocks\PYGZus{}x}\PYG{p}{,} \PYG{n}{num\PYGZus{}blocks\PYGZus{}y}\PYG{p}{)} \PYG{n}{knl\PYGZus{}gemv!}\PYG{p}{(}\PYG{n}{d\PYGZus{}b}\PYG{p}{,} \PYG{n}{d\PYGZus{}A}\PYG{p}{,} \PYG{n}{d\PYGZus{}u}\PYG{p}{)}
+
+    \PYG{n}{t\PYGZus{}dev} \PYG{o}{=} \PYG{n+nd}{@elapsed} \PYG{k}{begin}
+    \PYG{k}{for} \PYG{n}{n} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{length}\PYG{p}{(}\PYG{n}{t}\PYG{p}{)}
+        \PYG{n}{b} \PYG{o}{=} \PYG{n}{Δt} \PYG{o}{*} \PYG{n}{F}\PYG{p}{(}\PYG{n}{x}\PYG{p}{,} \PYG{n}{t}\PYG{p}{[}\PYG{n}{n}\PYG{p}{])}
+        \PYG{n}{d\PYGZus{}b} \PYG{o}{=} \PYG{n}{CuArray}\PYG{p}{(}\PYG{n}{b}\PYG{p}{)}
+        \PYG{n+nd}{@cuda} \PYG{n}{threads} \PYG{o}{=} \PYG{n}{thd\PYGZus{}tuple} \PYG{n}{blocks} \PYG{o}{=} \PYG{p}{(}\PYG{n}{num\PYGZus{}blocks\PYGZus{}x}\PYG{p}{,} \PYG{n}{num\PYGZus{}blocks\PYGZus{}y}\PYG{p}{)} \PYG{n}{knl\PYGZus{}gemv!}\PYG{p}{(}\PYG{n}{d\PYGZus{}b}\PYG{p}{,} \PYG{n}{d\PYGZus{}A}\PYG{p}{,} \PYG{n}{d\PYGZus{}u}\PYG{p}{)}
+        \PYG{n}{synchronize}\PYG{p}{()}
+
+        \PYG{n}{d\PYGZus{}u} \PYG{o}{.=} \PYG{n}{d\PYGZus{}b}
+
+        \PYG{n}{d\PYGZus{}u}\PYG{p}{[}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{]} \PYG{o}{=} \PYG{l+m+mi}{0}
+        \PYG{n}{d\PYGZus{}u}\PYG{p}{[}\PYG{n}{length}\PYG{p}{(}\PYG{n}{x}\PYG{p}{),}\PYG{l+m+mi}{1}\PYG{p}{]} \PYG{o}{=} \PYG{l+m+mi}{0}
+    \PYG{k}{end}
+    \PYG{k}{end}
+    \PYG{n+nd}{@show} \PYG{n}{t\PYGZus{}dev}
+
+    \PYG{n}{t\PYGZus{}serial} \PYG{o}{=} \PYG{n+nd}{@elapsed} \PYG{k}{begin}
+    \PYG{k}{for} \PYG{n}{n} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{length}\PYG{p}{(}\PYG{n}{t}\PYG{p}{)}
+        \PYG{n}{b\PYGZus{}serial} \PYG{o}{=} \PYG{n}{Δt} \PYG{o}{*} \PYG{n}{F}\PYG{p}{(}\PYG{n}{x}\PYG{p}{,} \PYG{n}{t}\PYG{p}{[}\PYG{n}{n}\PYG{p}{])}
+        \PYG{n}{u\PYGZus{}serial} \PYG{o}{.=} \PYG{n}{A}\PYG{o}{*}\PYG{n}{u\PYGZus{}serial} \PYG{o}{+} \PYG{n}{b\PYGZus{}serial}
+
+        \PYG{n}{u\PYGZus{}serial}\PYG{p}{[}\PYG{l+m+mi}{1}\PYG{p}{]} \PYG{o}{=} \PYG{l+m+mi}{0}
+        \PYG{n}{u\PYGZus{}serial}\PYG{p}{[}\PYG{n}{length}\PYG{p}{(}\PYG{n}{x}\PYG{p}{)]} \PYG{o}{=} \PYG{l+m+mi}{0}
+    \PYG{k}{end}
+    \PYG{k}{end}
+    \PYG{n+nd}{@show} \PYG{n}{t\PYGZus{}serial}
+
+
+    \PYG{c}{\PYGZsh{}Δx = 0.00125?}
+
+
+
+    \PYG{k}{return} \PYG{n}{d\PYGZus{}u}
+\PYG{k}{end}
+
+\PYG{k}{function} \PYG{n}{my\PYGZus{}forward\PYGZus{}Euler!}\PYG{p}{(}\PYG{n}{Y}\PYG{p}{,} \PYG{n}{Δt}\PYG{p}{,} \PYG{n}{t}\PYG{p}{,} \PYG{n}{A}\PYG{p}{,} \PYG{n}{F}\PYG{p}{,} \PYG{n}{y}\PYG{p}{,} \PYG{n}{x}\PYG{p}{,} \PYG{n}{N}\PYG{p}{,} \PYG{n}{M}\PYG{p}{)}
+    \PYG{c}{\PYGZsh{}M = length(t)}
+    \PYG{c}{\PYGZsh{}t = t1:Δt:tf}
+    \PYG{c}{\PYGZsh{}M = Integer(ceil((tf\PYGZhy{}t1)/Δt))}
+    \PYG{n}{Y}\PYG{p}{[}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{]} \PYG{o}{=} \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]}
+
+    \PYG{k}{for} \PYG{n}{n} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{M}
+        \PYG{n}{b} \PYG{o}{=} \PYG{n}{Δt} \PYG{o}{*} \PYG{n}{F}\PYG{p}{(}\PYG{n}{x}\PYG{p}{[}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{p}{],}\PYG{n}{t}\PYG{p}{[}\PYG{n}{n}\PYG{p}{])}
+        \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]} \PYG{o}{=} \PYG{n}{A} \PYG{o}{*} \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]} \PYG{o}{+} \PYG{n}{b}
+        \PYG{n}{Y}\PYG{p}{[}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{p}{,}\PYG{n}{n}\PYG{p}{]} \PYG{o}{.=} \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]}
+
+    \PYG{k}{end}
+
+    \PYG{c}{\PYGZsh{}return (t, Y)}
+
+\PYG{k}{end}
+
+
+\PYG{k}{function} \PYG{n}{ℜ}\PYG{p}{(}\PYG{n}{Δx}\PYG{p}{)}
+    \PYG{n}{k} \PYG{o}{=} \PYG{l+m+mi}{2}
+    \PYG{n}{Δx} \PYG{o}{=} \PYG{l+m+mf}{0.000125}
+
+
+    \PYG{n}{λ} \PYG{o}{=} \PYG{l+m+mf}{0.1}
+   \PYG{n}{Δt} \PYG{o}{=} \PYG{n}{λ}\PYG{o}{*}\PYG{n}{Δx}\PYG{o}{\PYGZca{}}\PYG{l+m+mi}{2} \PYG{o}{/} \PYG{n}{k}
+    \PYG{n}{T} \PYG{o}{=} \PYG{l+m+mi}{3}\PYG{o}{*}\PYG{n}{Δt}
+
+    \PYG{n}{x} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{o}{:}\PYG{n}{Δx}\PYG{o}{:}\PYG{l+m+mi}{1}
+    \PYG{n}{t} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{o}{:}\PYG{n}{Δt}\PYG{o}{:}\PYG{n}{T}
+
+    \PYG{n}{uₕ} \PYG{o}{=} \PYG{n}{time\PYGZus{}dependent\PYGZus{}heat\PYGZus{}GPU}\PYG{p}{(}\PYG{n}{k}\PYG{p}{,} \PYG{n}{Δx}\PYG{p}{,} \PYG{n}{Δt}\PYG{p}{,} \PYG{n}{T}\PYG{p}{,} \PYG{n}{F}\PYG{p}{,} \PYG{n}{f}\PYG{p}{)}
+
+    \PYG{n}{uexact} \PYG{o}{=}\PYG{n}{CuArray}\PYG{p}{(} \PYG{n}{exact}\PYG{p}{(}\PYG{n}{x}\PYG{p}{,} \PYG{n}{t}\PYG{p}{[}\PYG{n}{length}\PYG{p}{(}\PYG{n}{t}\PYG{p}{)]))}
+    \PYG{c}{\PYGZsh{}uexact = exact(x, t[length(t)])}
+    \PYG{n}{error} \PYG{o}{=}\PYG{n}{sqrt}\PYG{o}{.}\PYG{p}{(} \PYG{n}{Δx} \PYG{o}{*} \PYG{p}{(}\PYG{n}{transpose}\PYG{p}{(}\PYG{n}{uₕ}\PYG{o}{\PYGZhy{}}\PYG{n}{uexact}\PYG{p}{)} \PYG{o}{*} \PYG{p}{(}\PYG{n}{uₕ}\PYG{o}{\PYGZhy{}}\PYG{n}{uexact}\PYG{p}{)))}
+    \PYG{k}{return} \PYG{n}{error}\PYG{p}{[}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{]}
+\PYG{k}{end}
+
+\PYG{c}{\PYGZsh{}convergence\PYGZus{}rates(ℜ, 0.1, 4)}
+\end{Verbatim}

@@ -19,10 +19,6 @@ function F(x,t)
     return 2*(pi^2 -1)*exp(-2t)*sin.(pi*x)
 end
 
-function G(x,t)
-    return k*exp(-2t)*pi^2*sin.(pi*x)
-end
-
 function f(x)
     return sin.(pi*x)
 end
@@ -141,34 +137,7 @@ function ℜ(Δx)
         sleep(0.25)
 
     end=#
-    return U1, U2, e1, e2
+    return e1#  U1, U2, e1, e2
 end
-#convergence_rates(ℜ, 0.1, 4)
-U1, U2, e1, e2 = ℜ(0.05);
-#
-#=
-(U, E) = steady_state_solve(k, Δx, F, exact)
-labels = ["approx" "exact"]
-markershapes= [:circle :star5];
-markercolors= [:green :red];
-plot(x,[U E], label = labels, shape = markershapes, color = markercolors)
-=#
-
-
-#U = steady_state_solve(k, Δx, G, exact)
-
-#=
-pyplot(legend=false, xlim=(0,1), ylim=(0,1.25))
-
-anim = @animate for i = 1:length(t)
-    #plot(x,exact(x[:],t[i]))
-    #plot(x[:], [U[:,i], exact(x[:], t[i])])
-    p1 = plot(xfine,exact(xfine[:],t[i]), title="exact")
-    p2 = plot(x,U[:,i], title="forward Euler", shape=:star)
-    plot(p1,p2, layout=(1,2))
-
-
-end
-
-gif(anim, "anim_fps15.gif", fps = 30)
-=#
+convergence_rates(ℜ, 0.1, 4)
+#U1, U2, e1, e2 = ℜ(0.05);

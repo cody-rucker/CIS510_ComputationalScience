@@ -1,0 +1,76 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{using} \PYG{n}{SparseArrays}
+\PYG{k}{using} \PYG{n}{Plots}
+\PYG{n}{include}\PYG{p}{(}\PYG{l+s}{\PYGZdq{}myForwBack\PYGZus{}Euler.jl\PYGZdq{}}\PYG{p}{)}
+\PYG{n}{include}\PYG{p}{(}\PYG{l+s}{\PYGZdq{}/home/cody/github/Finite\PYGZus{}Element\PYGZus{}Methods/convergence\PYGZus{}rates.jl\PYGZdq{}}\PYG{p}{)}
+
+\PYG{c}{\PYGZsh{} source function}
+\PYG{k}{function} \PYG{n}{F}\PYG{p}{(}\PYG{n}{x}\PYG{p}{,}\PYG{n}{t}\PYG{p}{)}
+    \PYG{k}{return} \PYG{l+m+mi}{2}\PYG{o}{*}\PYG{p}{(}\PYG{n+nb}{pi}\PYG{o}{\PYGZca{}}\PYG{l+m+mi}{2} \PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{)}\PYG{o}{*}\PYG{n}{exp}\PYG{p}{(}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{n}{t}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sin}\PYG{o}{.}\PYG{p}{(}\PYG{n+nb}{pi}\PYG{o}{*}\PYG{n}{x}\PYG{p}{)}
+\PYG{k}{end}
+
+\PYG{c}{\PYGZsh{} initial value function}
+\PYG{k}{function} \PYG{n}{f}\PYG{p}{(}\PYG{n}{x}\PYG{p}{)}
+    \PYG{k}{return} \PYG{n}{sin}\PYG{o}{.}\PYG{p}{(}\PYG{n+nb}{pi}\PYG{o}{*}\PYG{n}{x}\PYG{p}{)}
+\PYG{k}{end}
+
+\PYG{c}{\PYGZsh{} exact solution}
+\PYG{k}{function} \PYG{n}{exact}\PYG{p}{(}\PYG{n}{x}\PYG{p}{,}\PYG{n}{t}\PYG{p}{)}
+    \PYG{k}{return} \PYG{n}{exp}\PYG{p}{(}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{n}{t}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sin}\PYG{o}{.}\PYG{p}{(}\PYG{n+nb}{pi}\PYG{o}{*}\PYG{n}{x}\PYG{p}{)}
+    \PYG{c}{\PYGZsh{}return exp(\PYGZhy{}pi\PYGZca{}2 * t)*sin.(pi*x)}
+\PYG{k}{end}
+
+\PYG{k}{function} \PYG{n}{time\PYGZus{}dependent\PYGZus{}heat}\PYG{p}{(}\PYG{n}{k}\PYG{p}{,} \PYG{n}{Δx}\PYG{p}{,} \PYG{n}{Δt}\PYG{p}{,} \PYG{n}{T}\PYG{p}{,} \PYG{n}{my\PYGZus{}source}\PYG{p}{,} \PYG{n}{my\PYGZus{}initial}\PYG{p}{,} \PYG{n}{my\PYGZus{}exact}\PYG{p}{)}
+    \PYG{n}{N}  \PYG{o}{=} \PYG{k+kt}{Integer}\PYG{p}{(}\PYG{n}{ceil}\PYG{p}{((}\PYG{l+m+mi}{1}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{0}\PYG{p}{)}\PYG{o}{/}\PYG{n}{Δx}\PYG{p}{))} \PYG{c}{\PYGZsh{} N+1 total nodes, N\PYGZhy{}1 interior nodes}
+    \PYG{n}{x} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{o}{:}\PYG{n}{Δx}\PYG{o}{:}\PYG{l+m+mi}{1}
+    \PYG{n}{t} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{o}{:}\PYG{n}{Δt}\PYG{o}{:}\PYG{n}{T}
+    \PYG{n}{M} \PYG{o}{=} \PYG{k+kt}{Integer}\PYG{p}{(}\PYG{n}{ceil}\PYG{p}{((}\PYG{n}{T}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{0}\PYG{p}{)}\PYG{o}{/}\PYG{n}{Δt}\PYG{p}{))} \PYG{c}{\PYGZsh{} M+1 total temporal nodes}
+
+    \PYG{n}{λ} \PYG{o}{=} \PYG{n}{Δt}\PYG{o}{/}\PYG{n}{Δx}\PYG{o}{\PYGZca{}}\PYG{l+m+mi}{2}
+
+    \PYG{c}{\PYGZsh{} A is N\PYGZhy{}1 by N\PYGZhy{}1 matrix for forward Euler}
+    \PYG{n}{A} \PYG{o}{=} \PYG{p}{(}\PYG{l+m+mi}{1}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{o}{*}\PYG{n}{λ}\PYG{o}{*}\PYG{n}{k}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sparse}\PYG{p}{(}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{ones}\PYG{p}{(}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{),} \PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,} \PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{+}
+            \PYG{p}{(}\PYG{n}{λ}\PYG{o}{*}\PYG{n}{k}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sparse}\PYG{p}{(}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{p}{,}\PYG{n}{ones}\PYG{p}{(}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{p}{),}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{+}
+            \PYG{p}{(}\PYG{n}{λ}\PYG{o}{*}\PYG{n}{k}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sparse}\PYG{p}{(}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{p}{,}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{ones}\PYG{p}{(}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{p}{),}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{)}
+
+	\PYG{c}{\PYGZsh{} A2 is the appropriate matrix for backward Euler}
+    \PYG{n}{A2} \PYG{o}{=} \PYG{p}{(}\PYG{l+m+mi}{1}\PYG{o}{+}\PYG{l+m+mi}{2}\PYG{o}{*}\PYG{n}{λ}\PYG{o}{*}\PYG{n}{k}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sparse}\PYG{p}{(}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{ones}\PYG{p}{(}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{),} \PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,} \PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{\PYGZhy{}}
+             \PYG{p}{(}\PYG{n}{λ}\PYG{o}{*}\PYG{n}{k}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sparse}\PYG{p}{(}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{p}{,}\PYG{n}{ones}\PYG{p}{(}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{p}{),}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{)} \PYG{o}{\PYGZhy{}}
+             \PYG{p}{(}\PYG{n}{λ}\PYG{o}{*}\PYG{n}{k}\PYG{p}{)}\PYG{o}{*}\PYG{n}{sparse}\PYG{p}{(}\PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{p}{,}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{ones}\PYG{p}{(}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{2}\PYG{p}{),}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{)}
+
+    \PYG{n}{u} \PYG{o}{=} \PYG{k+kt}{Array}\PYG{p}{\PYGZob{}}\PYG{k+kt}{Float64}\PYG{p}{\PYGZcb{}(}\PYG{n}{undef}\PYG{p}{,}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{)}
+    \PYG{n}{u} \PYG{o}{.=} \PYG{n}{my\PYGZus{}initial}\PYG{p}{(}\PYG{n}{x}\PYG{p}{[}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{p}{])}  \PYG{c}{\PYGZsh{} setting the initial condition for interior nodes}
+    \PYG{n}{u2} \PYG{o}{=} \PYG{n}{copy}\PYG{p}{(}\PYG{n}{u}\PYG{p}{)}
+    \PYG{n}{Y} \PYG{o}{=} \PYG{n}{zeros}\PYG{p}{(}\PYG{n}{N}\PYG{o}{+}\PYG{l+m+mi}{1}\PYG{p}{,}\PYG{n}{M}\PYG{p}{)}         \PYG{c}{\PYGZsh{} initializing solution matrix}
+    \PYG{n}{Z} \PYG{o}{=} \PYG{n}{copy}\PYG{p}{(}\PYG{n}{Y}\PYG{p}{)}
+
+    \PYG{n}{my\PYGZus{}forward\PYGZus{}Euler!}\PYG{p}{(}\PYG{n}{Y}\PYG{p}{,} \PYG{n}{Δt}\PYG{p}{,} \PYG{n}{t}\PYG{p}{,} \PYG{n}{A}\PYG{p}{,} \PYG{n}{F}\PYG{p}{,} \PYG{n}{u}\PYG{p}{,} \PYG{n}{x}\PYG{p}{,} \PYG{n}{N}\PYG{p}{,} \PYG{n}{M}\PYG{p}{)}
+    \PYG{n}{my\PYGZus{}backward\PYGZus{}Euler!}\PYG{p}{(}\PYG{n}{Z}\PYG{p}{,} \PYG{n}{Δt}\PYG{p}{,} \PYG{n}{t}\PYG{p}{,} \PYG{n}{A2}\PYG{p}{,} \PYG{n}{F}\PYG{p}{,} \PYG{n}{u2}\PYG{p}{,} \PYG{n}{x}\PYG{p}{,} \PYG{n}{N}\PYG{p}{,} \PYG{n}{M}\PYG{p}{)}
+
+
+    \PYG{n}{uₑ₁} \PYG{o}{=} \PYG{n}{my\PYGZus{}exact}\PYG{p}{(}\PYG{n}{x}\PYG{p}{[}\PYG{o}{:}\PYG{p}{],} \PYG{n}{t}\PYG{p}{[}\PYG{n}{M}\PYG{p}{])} \PYG{o}{\PYGZhy{}} \PYG{n}{Y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{,} \PYG{n}{M}\PYG{p}{]}
+    \PYG{n}{uₑ₂} \PYG{o}{=} \PYG{n}{my\PYGZus{}exact}\PYG{p}{(}\PYG{n}{x}\PYG{p}{[}\PYG{o}{:}\PYG{p}{],} \PYG{n}{t}\PYG{p}{[}\PYG{n}{M}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{])} \PYG{o}{\PYGZhy{}} \PYG{n}{Z}\PYG{p}{[}\PYG{o}{:}\PYG{p}{,} \PYG{n}{M}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{]}
+
+    \PYG{n}{e1} \PYG{o}{=} \PYG{n}{sqrt}\PYG{p}{(}\PYG{n}{Δx} \PYG{o}{*} \PYG{n}{uₑ₁}\PYG{o}{\PYGZsq{}} \PYG{o}{*} \PYG{n}{uₑ₁}\PYG{p}{)}
+    \PYG{n}{e2} \PYG{o}{=} \PYG{n}{sqrt}\PYG{p}{(}\PYG{n}{Δx} \PYG{o}{*} \PYG{n}{uₑ₂}\PYG{o}{\PYGZsq{}} \PYG{o}{*} \PYG{n}{uₑ₂}\PYG{p}{)}
+
+    \PYG{k}{return} \PYG{n}{Y}\PYG{p}{,} \PYG{n}{Z}\PYG{p}{,} \PYG{n}{e1}\PYG{p}{,} \PYG{n}{e2}
+\PYG{k}{end}
+
+\PYG{c}{\PYGZsh{} repackage the solution as a function of grid spacing which returns the discrete}
+\PYG{c}{\PYGZsh{} L²\PYGZhy{}error}
+\PYG{k}{function} \PYG{n}{R}\PYG{p}{(}\PYG{n}{Δx}\PYG{p}{)}
+    \PYG{n}{k} \PYG{o}{=} \PYG{l+m+mi}{2}
+    \PYG{c}{\PYGZsh{}Δx = 0.1}
+
+    \PYG{n}{T} \PYG{o}{=} \PYG{l+m+mi}{2}
+    \PYG{n}{λ} \PYG{o}{=} \PYG{l+m+mf}{0.2}
+    \PYG{n}{Δt} \PYG{o}{=} \PYG{n}{λ}\PYG{o}{*}\PYG{n}{Δx}\PYG{o}{\PYGZca{}}\PYG{l+m+mi}{2} \PYG{o}{/} \PYG{n}{k}
+
+    \PYG{n}{x} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{o}{:}\PYG{n}{Δx}\PYG{o}{:}\PYG{l+m+mi}{1}
+    \PYG{n}{t} \PYG{o}{=} \PYG{l+m+mi}{0}\PYG{o}{:}\PYG{n}{Δt}\PYG{o}{:}\PYG{n}{T}
+
+    \PYG{n}{U1}\PYG{p}{,} \PYG{n}{U2}\PYG{p}{,} \PYG{n}{e1}\PYG{p}{,} \PYG{n}{e2} \PYG{o}{=} \PYG{n}{time\PYGZus{}dependent\PYGZus{}heat}\PYG{p}{(}\PYG{n}{k}\PYG{p}{,} \PYG{n}{Δx}\PYG{p}{,} \PYG{n}{Δt}\PYG{p}{,} \PYG{n}{T}\PYG{p}{,} \PYG{n}{F}\PYG{p}{,} \PYG{n}{f}\PYG{p}{,} \PYG{n}{exact}\PYG{p}{)}
+\PYG{k}{return} \PYG{n}{U1}\PYG{p}{,} \PYG{n}{U2}\PYG{p}{,} \PYG{n}{e1}\PYG{p}{,} \PYG{n}{e2}
+\PYG{k}{end}
+\end{Verbatim}

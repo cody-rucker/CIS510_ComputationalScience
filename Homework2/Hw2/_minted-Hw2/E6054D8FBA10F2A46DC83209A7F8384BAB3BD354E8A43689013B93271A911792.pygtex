@@ -1,0 +1,39 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{using} \PYG{n}{LinearAlgebra}
+\PYG{k}{using} \PYG{n}{Plots}
+
+\PYG{k}{function} \PYG{n}{my\PYGZus{}forward\PYGZus{}Euler!}\PYG{p}{(}\PYG{n}{Y}\PYG{p}{,} \PYG{n}{Δt}\PYG{p}{,} \PYG{n}{t}\PYG{p}{,} \PYG{n}{A}\PYG{p}{,} \PYG{n}{F}\PYG{p}{,} \PYG{n}{y}\PYG{p}{,} \PYG{n}{x}\PYG{p}{,} \PYG{n}{N}\PYG{p}{,} \PYG{n}{M}\PYG{p}{)}
+    \PYG{c}{\PYGZsh{}M = length(t)}
+    \PYG{c}{\PYGZsh{}t = t1:Δt:tf}
+    \PYG{c}{\PYGZsh{}M = Integer(ceil((tf\PYGZhy{}t1)/Δt))}
+    \PYG{n}{Y}\PYG{p}{[}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{]} \PYG{o}{=} \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]}
+
+    \PYG{k}{for} \PYG{n}{n} \PYG{o}{=} \PYG{l+m+mi}{1}\PYG{o}{:}\PYG{n}{M}
+        \PYG{n}{b} \PYG{o}{=} \PYG{n}{Δt} \PYG{o}{*} \PYG{n}{F}\PYG{p}{(}\PYG{n}{x}\PYG{p}{[}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{p}{],}\PYG{n}{t}\PYG{p}{[}\PYG{n}{n}\PYG{p}{])}
+        \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]} \PYG{o}{=} \PYG{n}{A} \PYG{o}{*} \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]} \PYG{o}{+} \PYG{n}{b}
+        \PYG{n}{Y}\PYG{p}{[}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{p}{,}\PYG{n}{n}\PYG{p}{]} \PYG{o}{.=} \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]}
+
+    \PYG{k}{end}
+
+    \PYG{c}{\PYGZsh{}return (t, Y)}
+
+\PYG{k}{end}
+
+
+\PYG{k}{function} \PYG{n}{my\PYGZus{}backward\PYGZus{}Euler!}\PYG{p}{(}\PYG{n}{Y}\PYG{p}{,} \PYG{n}{Δt}\PYG{p}{,} \PYG{n}{t}\PYG{p}{,} \PYG{n}{A}\PYG{p}{,} \PYG{n}{F}\PYG{p}{,} \PYG{n}{y}\PYG{p}{,} \PYG{n}{x}\PYG{p}{,} \PYG{n}{N}\PYG{p}{,} \PYG{n}{M}\PYG{p}{)}
+
+
+    \PYG{n}{Y}\PYG{p}{[}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{p}{,}\PYG{l+m+mi}{1}\PYG{p}{]} \PYG{o}{=} \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]}
+
+    \PYG{c}{\PYGZsh{}Exact = Matrix\PYGZob{}Float64\PYGZcb{}(undef,2,N+1)}
+    \PYG{c}{\PYGZsh{}Exact[:,1] = y[:]}
+
+    \PYG{n}{Id} \PYG{o}{=} \PYG{n+nb}{I}\PYG{p}{(}\PYG{n}{N}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{)} \PYG{c}{\PYGZsh{}Matrix\PYGZob{}Float64\PYGZcb{}(I,N+1,N+1)}
+
+    \PYG{k}{for} \PYG{n}{n} \PYG{o}{=} \PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{M}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}
+        \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]} \PYG{o}{=} \PYG{n}{A}\PYG{o}{\PYGZbs{}}\PYG{p}{(}\PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]} \PYG{o}{.+} \PYG{n}{Δt}\PYG{o}{*}\PYG{n}{F}\PYG{p}{(}\PYG{n}{x}\PYG{p}{[}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{p}{],} \PYG{n}{t}\PYG{p}{[}\PYG{n}{n}\PYG{p}{]))}
+        \PYG{n}{Y}\PYG{p}{[}\PYG{l+m+mi}{2}\PYG{o}{:}\PYG{n}{N}\PYG{p}{,}\PYG{n}{n}\PYG{p}{]} \PYG{o}{=} \PYG{n}{y}\PYG{p}{[}\PYG{o}{:}\PYG{p}{]}
+        \PYG{c}{\PYGZsh{}Exact[:,n] = exact(t[n])}
+    \PYG{k}{end}
+\PYG{k}{end}
+\end{Verbatim}
